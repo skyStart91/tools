@@ -14,6 +14,9 @@ echo "Certificate Starting..."
 read -p "Please Input Effective Time(Unit By Day):" -t 20 STIME
 openssl x509 -req -days $STIME -in server.csr -signkey server.key -out server.crt
 echo "Completed"
+#这里的P一定得是完整的路径名包括最后一个斜杆/
+read -p "Move Certificate To Target Path : " P
+mv server.* $P
 echo "Change Authrization Starting..."
-chmod 644 server.key server.csr server.crt
+chmod 644 ${P}server.key ${P}server.csr ${P}server.crt
 echo "All Completed"
