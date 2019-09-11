@@ -1,40 +1,17 @@
 <?php
-//============================================================+
-// File name   : class.wordphp.php
-// Begin       : 2014-03-09
-// Last Update : 2014-08-08
-// Version     : 1.0
-// License     : GNU LGPL (http://www.gnu.org/copyleft/lesser.html)
-// 	----------------------------------------------------------------------------
-//  Copyright (C) 20014 Ricardo Pinto
-// 	
-// 	This program is free software: you can redistribute it and/or modify
-// 	it under the terms of the GNU Lesser General Public License as published by
-// 	the Free Software Foundation, either version 2.1 of the License, or
-// 	(at your option) any later version.
-// 	
-// 	This program is distributed in the hope that it will be useful,
-// 	but WITHOUT ANY WARRANTY; without even the implied warranty of
-// 	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// 	GNU Lesser General Public License for more details.
-// 	
-// 	You should have received a copy of the GNU Lesser General Public License
-// 	along with this program.  If not, see <http://www.gnu.org/licenses/>.
-// 	
-//  ----------------------------------------------------------------------------
-//
-// Description : PHP class to read DOCX file into HTML format
-//
-// Author: Ricardo Pinto
-//
-// (c) Copyright:
-//               Ricardo Pinto
-//============================================================+
 /**
- * 修改并支持了字体，背景颜色，下划线，字体大小的
- *
+ * 读取docx压缩文件内容,并支持以下功能：
+ * 1.标题1到标题6;
+ * 2.字体颜色
+ * 3.背景颜色
+ * 4.下划线
+ * 5.斜体
+ * 6.加粗
+ * 7.字体大小
+ * 8.列表(暂不支持，如果想实现列表可自行添加序列号，缩进使用格式段落)
+ * 9.读取图片(to do)
+ * 10.超链接(to do)
  */
-
 class WordPHP
 {
 	private $debug = true;
@@ -42,19 +19,6 @@ class WordPHP
 	private $doc_xml;
 	private $last = 'none';
 	private $encoding = 'utf-8';
-	
-	/**
-	 * CONSTRUCTOR
-	 * 
-	 * @param Boolean $debug Debug mode or not
-	 * @return void
-	 */
-	public function __construct($encoding="gbk", $debug_=null)
-	{
-		if($debug_ != null)
-			$this->debug = $debug_;
-		// $this->encoding = $encoding;
-	}
 	
 	/**
 	 * READS The Document and Relationships into separated XML files
@@ -130,13 +94,16 @@ class WordPHP
 	 */
 	private function checkFormating(&$xml)
 	{	
-		$node = trim($xml->readOuterXML());		
+		$node = trim($xml->readOuterXML());
 		// add <br> tags
 		if (strstr($node,'<w:br ')) $text .= '<br>';					 
 		// look for formatting tags
 		$f = "<span style='";
 		$reader = new XMLReader();
 		$reader->XML($node);
+		// 样式选择
+		static $listNum = 0;
+		$contents = $aLink = '';
 		while ($reader->read()) {
 			if($reader->name == "w:b")
 				$f .= "font-weight: bold;";
@@ -157,12 +124,28 @@ class WordPHP
 				$f .= 'font-style: italic;';
 			}
 			if($reader->name == "w:sz"){
-				$f .= 'font-size:'.$reader->getAttribute("w:val").'px;';
+				$f .= 'font-size:'.($reader->getAttribute("w:val")/2).'pt;';
+			}
+			// 首行缩进
+			if($reader->name == "w:ind" && $reader->getAttribute("w:leftChars")){
+				$f .= 'padding-left:'.($reader->getAttribute("w:leftChars")/100).'em;';
+			}
+
+			// 列表(当前支持的列表只能从小到大的技术，如果出现多个列表，计数不会中断,如果出现二级列表三级列表就需要自己手动操作  to do...)
+			// if($reader->name == 'w:keepNext'){
+			// 	$contents = ++$listNum.'.';
+			// }
+			// 超链接
+			if($reader->name == 'w:instrText'){
+				$patter = '/<w:instrtext\s+xml:space="preserve"\>\s+HYPERLINK\s+"(.*)"/i';
+				preg_match($patter, $node, $match);
+				$aLink = '<a href="'.$match[1].'" target="_blank">'.trim($xml->expand()->textContent).'</a>';
 			}
 		}
-
+		
 		$f .= "'>";
-		return $f.htmlentities(trim($xml->expand()->textContent))."</span>";
+
+		return $f.htmlentities(trim($xml->expand()->textContent))."</span>".$aLink;
 	}
 	
 	/**
@@ -172,34 +155,34 @@ class WordPHP
 	 * @param XML $xml The XML node
 	 * @return String HTML formatted code
 	 */
-	private function getListFormating(&$xml)
-	{	
-		$node = trim($xml->readOuterXML());
+	// private function getListFormating(&$xml)
+	// {	
+	// 	$node = trim($xml->readOuterXML());
 		
-		$reader = new XMLReader();
-		$reader->XML($node);
-		$ret="";
-		$close = "";
-		while ($reader->read()){
-			// if($reader->name == "w:numPr" && $reader->nodeType == XMLReader::ELEMENT ) {
+	// 	$reader = new XMLReader();
+	// 	$reader->XML($node);
+	// 	$ret="";
+	// 	$close = "";
+	// 	while ($reader->read()){
+	// 		// if($reader->name == "w:numPr" && $reader->nodeType == XMLReader::ELEMENT ) {
 				
-			// }
-			if($reader->name == "w:numId" && $reader->hasAttributes) {
-				switch($reader->getAttribute("w:val")) {
-					case 1:
-						$ret['open'] = "<ol><li>";
-						$ret['close'] = "</li></ol>";
-						break;
-					case 2:
-						$ret['open'] = "<ul><li>";
-						$ret['close'] = "</li></ul>";
-						break;
-				}
+	// 		// }
+	// 		if($reader->name == "w:numId" && $reader->hasAttributes) {
+	// 			switch($reader->getAttribute("w:val")) {
+	// 				case 1:
+	// 					$ret['open'] = "<ol><li>";
+	// 					$ret['close'] = "</li></ol>";
+	// 					break;
+	// 				case 2:
+	// 					$ret['open'] = "<ul><li>";
+	// 					$ret['close'] = "</li></ul>";
+	// 					break;
+	// 			}
 				
-			}
-		}
-		return $ret;
-	}
+	// 		}
+	// 	}
+	// 	return $ret;
+	// }
 	
 	/**
 	 * CHECKS IF THERE IS AN IMAGE PRESENT
@@ -267,38 +250,39 @@ class WordPHP
 		$reader->XML($this->doc_xml->saveXML());
 		$text = ''; $list_format="";
 		
-		$formatting['header'] = 0;
+		$formatting = 0;
 		// loop through docx xml dom
 		while ($reader->read()) {
-		// look for new paragraphs
+			// look for new paragraphs
 			$paragraph = new XMLReader;
 			$p = $reader->readOuterXML();
 			if ($reader->nodeType == XMLREADER::ELEMENT && $reader->name === 'w:p') {
 				// set up new instance of XMLReader for parsing paragraph independantly				
 				$paragraph->xml($p);
-
-				// preg_match('/<w:rStyle\s?w:val="([8|9|10|11])"/',$p,$matches);
-				// if(isset($matches[0])) {
-				// 	echo $matches[0] = 8;
-				// 	switch($matches[0]){
-				// 		case '8': $formatting['header'] = 1; break;
-				// 		case '9': $formatting['header'] = 2; break;
-				// 		case '10': $formatting['header'] = 3; break;
-				// 		case '11': $formatting['header'] = 4; break;
-				// 	}
-				// }
-				// echo $formatting['header'];
-				// open h-tag or paragraph
-				// $text .= ($formatting['header'] > 0) ? '<h'.$formatting['header'].'>' : '<p>';
+				// 匹配w:pStyle标签用作h标签[只支持h1-h6]
+				preg_match('/<w:pStyle\s?w:val="(\d*)"/',$p,$matches);
+				if(isset($matches[1])) {
+					switch($matches[1]){
+						case '2': $formatting = 1; break;
+						case '3': $formatting = 2; break;
+						case '4': $formatting = 3; break;
+						case '5': $formatting = 4; break;
+						case '6': $formatting = 5; break;
+						case '7': $formatting = 6; break;
+					}
+					// 获取到h标签
+					$text .= ($formatting > 0)? '<h'.$formatting.'>':'<p>';
+				}
+				// 组装到text变量中
 				$text .= '<p>';
 				
 				// loop through paragraph dom
 				while ($paragraph->read()) {
 					// look for elements
-					if ($paragraph->nodeType == XMLREADER::ELEMENT && $paragraph->name === 'w:r') {
-						if($list_format == "")
+					if ($paragraph->nodeType == XMLREADER::ELEMENT && ($paragraph->name === 'w:r' || $paragraph->name === 'w:pPr')) {
+						if($list_format == ""){
 							$text .= $this->checkFormating($paragraph);
-						else {
+						}else{
 							$text .= $list_format['open'];
 							$text .= $this->checkFormating($paragraph);
 							$text .= $list_format['close'];
@@ -306,24 +290,23 @@ class WordPHP
 						$list_format ="";
 						$paragraph->next();
 					}
-					else if($paragraph->nodeType == XMLREADER::ELEMENT && $paragraph->name === 'w:pPr') { //lists
-						$list_format = $this->getListFormating($paragraph);
-						$paragraph->next();
-					}
+					// else if($paragraph->nodeType == XMLREADER::ELEMENT && $paragraph->name === 'w:pPr') { //lists
+					// 	$list_format = $this->getListFormating($paragraph);
+					// 	$paragraph->next();
+					// }
 					else if($paragraph->nodeType == XMLREADER::ELEMENT && $paragraph->name === 'w:drawing') { //images
 						$text .= $this->checkImageFormating($paragraph);
 						$paragraph->next();
 					}
-					else if ($paragraph->nodeType == XMLREADER::ELEMENT && $paragraph->name === 'w:hyperlink') {
-						$hyperlink = $this->getHyperlink($paragraph);
-						$text .= $hyperlink['open'];
-						$text .= $this->checkFormating($paragraph);
-						$text .= $hyperlink['close'];
-						$paragraph->next();
-					}
+					// else if ($paragraph->nodeType == XMLREADER::ELEMENT && $paragraph->name === 'w:instrText') {
+					// 	$hyperlink = $this->getHyperlink($paragraph);
+					// 	$text .= $hyperlink['open'];
+					// 	$text .= $this->checkFormating($paragraph);
+					// 	$text .= $hyperlink['close'];
+					// 	$paragraph->next();
+					// }
 				}
-				// $text .= ($formatting['header'] > 0) ? '</h'.$formatting['header'].'>' : '</p>';
-				$text .= '</p>';
+				$text .= ($formatting > 0)? '</h'.$formatting.'>': '</p>';
 			}
 		}
 		$reader->close();
@@ -332,6 +315,6 @@ class WordPHP
 			echo iconv($this->encoding, "UTF-8",$text);
 			echo "</div>";
 		}
-		// return $text;
+		return $text;
 	}
 }
